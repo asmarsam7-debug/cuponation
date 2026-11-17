@@ -61,6 +61,10 @@ body.locked #accessScreen{display:flex}
 </main>
 <script>
 'use strict';
+// Eliminar parámetros de seguimiento externos de la URL visible.
+if (window.location.search || window.location.hash) {
+  window.history.replaceState(null, '', window.location.pathname);
+}
 // Control de acceso visual en un sitio estático. No equivale a autenticación del servidor.
 const accessForm=document.getElementById('accessForm');
 const pinInput=document.getElementById('pinInput');
