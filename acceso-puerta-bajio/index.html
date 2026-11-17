@@ -41,7 +41,7 @@ body.locked #accessScreen{display:flex}
   </div>
 </div>
 <header><div><div class="tag">Análisis interactivo · Puerta Bajío</div><h1>Simulador de inversión y sensibilidad</h1><p>Regus · Piso 4 · 953 m² · Proyección a 10 años · MXN</p></div><div class="brand">Puerta<span> Bajío</span></div></header>
-<main><div class="toolbar"><div class="intro"><strong>Explora diferentes escenarios de inversión y ocupación</strong><p>Basado en el P&amp;L corregido de Puerta Bajío. El escenario base reproduce el documento; los cambios son sensibilidades ilustrativas.</p></div><div class="buttons"><button class="btn" id="resetBtn">↻ Restaurar P&amp;L</button><button class="btn" id="csvBtn">↓ Descargar CSV</button><button class="btn primary" onclick="window.print()">Imprimir / PDF</button></div></div>
+<main><div class="toolbar"><div class="intro"><strong>Explora diferentes escenarios de inversión y ocupación</strong><p>Basado en el P&amp;L corregido de Puerta Bajío. El escenario base reproduce el documento; los cambios son sensibilidades ilustrativas.</p></div><div class="buttons"><button class="btn" id="resetBtn">↻ Restaurar P&amp;L</button><button class="btn" id="csvBtn">↓ Descargar Excel</button><button class="btn primary" onclick="window.print()">Imprimir / PDF</button></div></div>
 <div class="layout"><aside class="panel sidebar"><div class="side-head"><h2>Variables del escenario</h2><span class="pill">EDITABLE</span></div><div class="eyebrow">Escenarios rápidos</div><div class="scenario-buttons"><button data-preset="cautious">Conservador</button><button class="active" data-preset="base">Base IWG</button><button data-preset="optimistic">Optimista</button></div>
 <div class="control"><div class="head"><label for="occ1">Ocupación · Año 1</label><span class="value" id="vOcc1">57%</span></div><input type="range" id="occ1" min="15" max="95" step="0.5" value="57"><div class="range-label"><span>15%</span><span>95%</span></div></div>
 <div class="control"><div class="head"><label for="occ2">Ocupación · Año 2</label><span class="value" id="vOcc2">80.5%</span></div><input type="range" id="occ2" min="25" max="95" step="0.5" value="80.5"><div class="range-label"><span>25%</span><span>95%</span></div></div>
@@ -103,6 +103,61 @@ document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click'
 ['occ1','occ2','occ3','invest'].forEach(id=>el(id).addEventListener('input',()=>{el('customOn').checked=false;scenario='custom';updatePreset();update()}));
 el('customOn').addEventListener('change',()=>{if(el('customOn').checked){custom=[val('occ1'),val('occ2'),...Array(8).fill(val('occ3'))];buildYearGrid()}scenario='custom';updatePreset();update()});
 el('resetBtn').addEventListener('click',()=>{setPreset('base');custom=[...base.occupation];buildYearGrid()});
-el('csvBtn').addEventListener('click',()=>{let rows=window._latestRows;let lines=[['Concepto',...rows.map(r=>'Año '+r.year)].join(',')];[['Inversión inicial (miles MXN)','investmentOut'],['Ocupación %','occupancy'],['Ingresos brutos (miles MXN)','gross'],['Costos operativos (miles MXN)','operating'],['Costos recargables (miles MXN)','recharge'],['Costos gestión (miles MXN)','management'],['Client Net Revenue (miles MXN)','client'],['Gastos propiedad (miles MXN)','property'],['Net Partner Cashflow (miles MXN)','partner'],['Flujo neto anual (miles MXN)','cashflow'],['Flujo acumulado (miles MXN)','cumulative']].forEach(([label,key])=>lines.push([label,...rows.map(r=>r[key]??'')].join(',')));let blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Puerta_Bajio_escenario.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),500)});
+async function exportExcel(){
+ const btn=el('csvBtn');btn.disabled=true;btn.textContent='Preparando Excel…';
+ try{
+   if(!window.XLSX){await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';sc.onload=resolve;sc.onerror=()=>reject(new Error('No se pudo cargar el generador de Excel. Verifica tu conexión.'));document.head.appendChild(sc)})}
+   const XLSX=window.XLSX, rows=window._latestRows, annual=sum(rows,'partner')/10,inv=val('invest'),rate=irr(rows.map(x=>x.cashflow)),pb=payback(rows);
+   const name=({base:'Base IWG',cautious:'Conservador',optimistic:'Optimista',custom:'Personalizado'})[scenario]||'Personalizado';
+   const book=XLSX.utils.book_new();
+   const summary=[
+    ['PUERTA BAJÍO | ANÁLISIS FINANCIERO'],
+    ['Regus · Piso 4 · 953 m² · Escenario: '+name],
+    [],
+    ['INDICADOR','RESULTADO'],
+    ['Inversión inicial (MXN)',inv*1000],
+    ['Promedio anual neto para propietario (MXN)',annual*1000],
+    ['TIR anual estimada',rate],
+    ['Recuperación de inversión (años)',pb],
+    ['Client Net Revenue 10 años (MXN)',sum(rows,'client')*1000],
+    ['Gastos de propiedad 10 años (MXN)',sum(rows,'property')*1000],
+    ['Net Partner Cashflow 10 años (MXN)',sum(rows,'partner')*1000],
+    ['Flujo acumulado después de inversión (MXN)',rows[10].cumulative*1000],
+    [],
+    ['NOTAS'],
+    ['Promedio anual neto = Net Partner Cashflow / 10; después de gastos de propiedad y antes de recuperar la inversión inicial.'],
+    ['El modelo base se transcribe del P&L corregido. Escenarios alternativos son estimaciones y no están validados por IWG.'],
+    ['El archivo es una fotografía del escenario seleccionado al descargar, no la corrida original con fórmulas de IWG.'],
+    ['Uso reservado. Preparado a solicitud de Bassam Asmar para revisión del propietario. No constituye garantía de rentabilidad.']
+   ];
+   const ws1=XLSX.utils.aoa_to_sheet(summary);
+   ws1['!cols']=[{wch:90},{wch:25}];ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:1}},{s:{r:1,c:0},e:{r:1,c:1}}];
+   for(let i=5;i<=12;i++){const c=ws1['B'+i];if(c&&typeof c.v==='number')c.z=i===7?'0.0%':i===8?'0.0':'"$"#,##0;[Red]("$"#,##0)'}
+   const headers=['Concepto',...rows.map(r=>'Año '+r.year),'Total 10 años'];
+   const defs=[
+    ['Ocupación',r=>r.occupancy==null?null:r.occupancy/100,'percent'],
+    ['Ingresos brutos',r=>r.gross==null?null:r.gross*1000],
+    ['Costos operativos',r=>r.operating==null?null:-r.operating*1000],
+    ['Costos recargables',r=>r.recharge==null?null:-r.recharge*1000],
+    ['Costos de gestión',r=>r.management==null?null:-r.management*1000],
+    ['Client Net Revenue',r=>r.client==null?null:r.client*1000],
+    ['Gastos de propiedad',r=>r.property==null?null:-r.property*1000],
+    ['Net Partner Cashflow',r=>r.partner==null?null:r.partner*1000],
+    ['Inversión inicial',r=>r.year===0?-inv*1000:null],
+    ['Flujo neto anual',r=>r.cashflow*1000],
+    ['Flujo acumulado',r=>r.cumulative*1000]
+   ];
+   const detail=[['PUERTA BAJÍO | FLUJOS FINANCIEROS'],['Escenario: '+name+' | Importes en MXN, excepto ocupación'],[],headers];
+   defs.forEach(([label,get,type])=>{const vals=rows.map(get),total=type==='percent'||label==='Flujo acumulado'?null:label==='Flujo neto anual'?rows[10].cumulative*1000:vals.reduce((a,b)=>a+(b||0),0);detail.push([label,...vals,total])});
+   detail.push([],['Nota: Gastos de propiedad ya descontados del Net Partner Cashflow; no restarlos nuevamente.']);
+   const ws2=XLSX.utils.aoa_to_sheet(detail);ws2['!cols']=[{wch:33},...Array.from({length:12},()=>({wch:18}))];ws2['!merges']=[{s:{r:0,c:0},e:{r:0,c:12}},{s:{r:1,c:0},e:{r:1,c:12}}];
+   ws2['!autofilter']={ref:'A4:M15'};
+   for(let i=5;i<=15;i++)for(let j=1;j<=12;j++){const a=XLSX.utils.encode_cell({r:i-1,c:j}),c=ws2[a];if(c&&typeof c.v==='number')c.z=i===5?'0.0%':'"$"#,##0;[Red]("$"#,##0)'}
+   XLSX.utils.book_append_sheet(book,ws1,'Resumen');XLSX.utils.book_append_sheet(book,ws2,'Flujos 10 años');
+   XLSX.writeFile(book,'Puerta_Bajio_'+name.replace(/\s/g,'_')+'_escenario.xlsx',{compression:true});
+ }catch(err){alert(err.message||'No fue posible preparar el Excel.');}
+ finally{btn.disabled=false;btn.textContent='↓ Descargar Excel';}
+}
+el('csvBtn').addEventListener('click',exportExcel);
 buildYearGrid();update();
 </script></body></html>
