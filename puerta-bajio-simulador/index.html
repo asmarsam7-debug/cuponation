@@ -68,7 +68,19 @@ if (window.location.search || window.location.hash) {
 // Control de acceso visual en un sitio estático. No equivale a autenticación del servidor.
 const accessForm=document.getElementById('accessForm');
 const pinInput=document.getElementById('pinInput');
+// El acceso se cierra al concluir noviembre 2026 en la zona horaria de Ciudad de México.
+const isExpired=()=>{
+ const d=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ return d>='2026-12-01';
+};
+if(isExpired()){
+ const input=document.getElementById('pinInput');
+ const button=accessForm.querySelector('button[type="submit"]');
+ input.disabled=true;button.disabled=true;button.textContent='Acceso finalizado';
+ document.getElementById('pinError').textContent='El periodo de revisión de esta herramienta ha concluido.';
+}
 accessForm.addEventListener('submit',function(e){e.preventDefault();
+  if(isExpired()){document.getElementById('pinError').textContent='El periodo de revisión ha concluido.';return;}
   if(pinInput.value==='6384'){
     document.body.classList.remove('locked');
     document.getElementById('accessScreen').remove();
