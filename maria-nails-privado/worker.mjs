@@ -53,7 +53,7 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
   if(/^\/api\/page\/[1-8]$/.test(p)&&req.method==='GET'){await accepted(req,e);const page=p.split('/').pop();const f=await e.PRIVATE.get(`proposal/page-${page}.webp`);if(!f)fail(503,'La propuesta está en preparación.');return new Response(f.body,{headers:{...baseHeaders,'Content-Type':'image/webp'}});}
   if(p==='/api/receipt'&&req.method==='GET'){const r=await accepted(req,e);return new Response(receiptHTML(r),{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Disposition':'attachment; filename="Acuerdo_Maria_Nails.html"'}});}
   if(p==='/api/logout'&&req.method==='POST') {const s=await session(req,e);await run(e,'DELETE FROM sessions WHERE token_hash=?',s.token_hash);return json({ok:true},200,{'Set-Cookie':'__Host-mn=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});}
-  if(p==='/api/privacy'&&req.method==='GET')return json({responsible:'Bassam Asmar',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
+  if(p==='/api/privacy'&&req.method==='GET')return json({responsible:'María del Rocío López Lozano',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
   fail(404,'Recurso no disponible.');
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json({error:'Método no permitido.'},405);
