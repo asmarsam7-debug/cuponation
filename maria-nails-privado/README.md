@@ -8,7 +8,7 @@ Invitación individual vinculada a un correo → código por email → nombre co
 
 ## Activación pendiente
 
-1. Confirmar correo de notificaciones y remitente, domicilio/correo del aviso de privacidad y contenido definitivo del acuerdo. Bassam Asmar asume personalmente obligaciones recíprocas al habilitarlo. Si se desea obligar a otros titulares o una sociedad, se deben identificar y acreditar sus facultades antes de activar.
+1. Confirmar correo de notificaciones y remitente, domicilio/correo del aviso de privacidad y contenido definitivo del acuerdo. María del Rocío López Lozano asume personalmente obligaciones recíprocas al habilitarlo. Si se desea obligar a otros titulares o una sociedad, se deben identificar y acreditar sus facultades antes de activar.
 2. Conectar una cuenta Cloudflare a este repositorio, carpeta `maria-nails-privado`; crear D1 y un bucket R2 PRIVADO (sin r2.dev ni dominio público). Aplicar `schema.sql` y sustituir el ID D1 de `wrangler.jsonc`. No agregar secretos al repositorio.
 3. Configurar secretos `RESEND_API_KEY`, `OTP_PEPPER` (aleatorio de al menos 32 bytes), `MAIL_FROM`, `OWNER_EMAIL`, `PRIVACY_EMAIL`, `PRIVACY_ADDRESS`. Verificar en Resend el dominio remitente y sus registros DNS. No usar un proveedor de email de pruebas para visitantes reales.
 4. Subir las ocho páginas WebP de la presentación final a las claves R2 `proposal/page-1.webp` ... `proposal/page-8.webp`, mediante acceso administrativo. No subirlas a GitHub. Las imágenes están preparadas localmente y excluidas del control de versiones.
