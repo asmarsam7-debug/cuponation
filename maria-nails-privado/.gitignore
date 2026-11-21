@@ -1,0 +1,5 @@
+private-pages/
+.dev.vars
+.env*
+.wrangler/
+node_modules/

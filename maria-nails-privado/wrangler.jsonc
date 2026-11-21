@@ -1,0 +1,22 @@
+{
+  "name": "maria-nails-privado",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-20",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://themarianails.com",
+    "ENABLED": "false"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "maria-nails-accesos",
+      "database_id": "7cf49200-521a-4c88-b162-c0cd6bd0a31a"
+    }
+  ]
+}
