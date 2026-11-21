@@ -8,7 +8,7 @@ const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status
 const fail=(status,message)=>{throw {status,message}};
 const run=(env,q,...v)=>env.DB.prepare(q).bind(...v).run();
 const first=(env,q,...v)=>env.DB.prepare(q).bind(...v).first();
-export function configured(e){return !!(e.DB&&e.PRIVATE&&e.RESEND_API_KEY&&e.MAIL_FROM&&e.OWNER_EMAIL&&e.PRIVACY_ADDRESS&&e.PRIVACY_EMAIL&&e.PUBLIC_ORIGIN&&e.OTP_PEPPER&&e.ENABLED==='true');}
+export function configured(e){return !!(e.DB&&e.ASSETS&&/^[a-f0-9]{64}$/.test(e.PROPOSAL_KEY||'')&&e.RESEND_API_KEY&&e.MAIL_FROM&&e.OWNER_EMAIL&&e.PRIVACY_ADDRESS&&e.PRIVACY_EMAIL&&e.PUBLIC_ORIGIN&&e.OTP_PEPPER&&e.ENABLED==='true');}
 async function limit(e,key,max){const k=await hash(key);const r=await first(e,'INSERT INTO rate_limits(key,hits) VALUES(?,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1 RETURNING hits',k);if(r.hits>max)fail(429,'Espera unos minutos antes de intentarlo de nuevo.');}
 async function invite(e,raw){if(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw))fail(403,'Invitación no disponible.');const h=await hash(raw);const r=await first(e,'SELECT * FROM invites WHERE id_hash=? AND revoked=0 AND expires>?',h,now());if(!r)fail(403,'Invitación no disponible.');return {...r,hash:h};}
 async function session(req,e){const t=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)__Host-mn=([a-f0-9]{64})(?:;|$)/)?.[1];if(!t)fail(401,'Verifica tu correo para continuar.');const s=await first(e,'SELECT s.* FROM sessions s JOIN invites i ON i.id_hash=s.invite_hash WHERE s.token_hash=? AND s.expires>? AND i.revoked=0 AND i.expires>?',await hash(t),now(),now());if(!s)fail(401,'Tu acceso venció. Verifica de nuevo tu correo.');return s;}
@@ -50,13 +50,15 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
    return json({ok:true,id:r.id,emailSubmitted:true});
   }
   if(p==='/api/open'&&req.method==='POST'){const r=await accepted(req,e);await event(e,r.id,'proposal_open');return json({name:r.name,email:r.email,pages:8});}
-  if(/^\/api\/page\/[1-8]$/.test(p)&&req.method==='GET'){await accepted(req,e);const page=p.split('/').pop();const f=await e.PRIVATE.get(`proposal/page-${page}.webp`);if(!f)fail(503,'La propuesta está en preparación.');return new Response(f.body,{headers:{...baseHeaders,'Content-Type':'image/webp'}});}
+  if(/^\/api\/page\/[1-8]$/.test(p)&&req.method==='GET'){await accepted(req,e);const page=p.split('/').pop();const f=await e.ASSETS.fetch(new Request(`https://assets.local/_sealed/page-${page}.json`));if(!f.ok)fail(503,'La propuesta está en preparación.');const sealed=await f.json();const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',Uint8Array.from(e.PROPOSAL_KEY.match(/../g),b=>parseInt(b,16)),'AES-GCM',false,['decrypt']);let clear;try{clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(sealed.iv),additionalData:enc.encode(`maria-nails:page-${page}`)},key,bytes(sealed.data));}catch{fail(503,'La propuesta está en preparación.');}return new Response(clear,{headers:{...baseHeaders,'Content-Type':'image/webp'}});}
   if(p==='/api/receipt'&&req.method==='GET'){const r=await accepted(req,e);return new Response(receiptHTML(r),{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Disposition':'attachment; filename="Acuerdo_Maria_Nails.html"'}});}
   if(p==='/api/logout'&&req.method==='POST') {const s=await session(req,e);await run(e,'DELETE FROM sessions WHERE token_hash=?',s.token_hash);return json({ok:true},200,{'Set-Cookie':'__Host-mn=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});}
   if(p==='/api/privacy'&&req.method==='GET')return json({responsible:'María del Rocío López Lozano',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
   fail(404,'Recurso no disponible.');
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json({error:'Método no permitido.'},405);
+ // Only the public shell is directly reachable; sealed assets are fetched internally after authorization.
+ if(!['/','/index.html','/app.js','/style.css'].includes(p))fail(404,'Recurso no disponible.');
  const res=await e.ASSETS.fetch(req);const h=new Headers(res.headers);for(const [k,v] of Object.entries(baseHeaders))h.set(k,v);return new Response(res.body,{status:res.status,headers:h});
  }catch(err){return json({error:err.status?err.message:'No fue posible completar la solicitud.'},err.status||500);}}
 };
