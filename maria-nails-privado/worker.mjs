@@ -31,7 +31,7 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
    const d=await body(req);await limit(e,`start:${ip}:${Math.floor(now()/600)}`,12);const i=await invite(e,d.invite);const email=String(d.email||'').trim().toLowerCase();if(email!==i.email)fail(403,'El correo no corresponde a esta invitación.');
    await limit(e,`email:${i.hash}:${Math.floor(now()/600)}`,3);const id=crypto.randomUUID();const n=new Uint32Array(1);do{crypto.getRandomValues(n)}while(n[0]>=4294000000);const code=String(n[0]%1000000).padStart(6,'0');
    await run(e,'INSERT INTO challenges(id,invite_hash,email,code_hash,expires) VALUES(?,?,?,?,?)',id,i.hash,email,await hash(`${e.OTP_PEPPER}:${id}:${code}`),now()+600);
-   await mail(e,email,'Tu código de acceso privado a María Nails',`<p>Tu código es <strong>${code}</strong>.</p><p>Vence en 10 minutos. No lo compartas. Este código solo verifica tu correo; todavía no has aceptado el acuerdo.</p>`,`otp-${id}`);return json({challenge:id});
+   await mail(e,email,'Tu código de acceso privado',`<p>Tu código es <strong>${code}</strong>.</p><p>Vence en 10 minutos. No lo compartas. Este código solo verifica tu correo; todavía no has aceptado el acuerdo.</p>`,`otp-${id}`);return json({challenge:id});
   }
   if(p==='/api/verify'&&req.method==='POST'){
    const d=await body(req);await limit(e,`verify:${ip}:${Math.floor(now()/600)}`,30);if(!/^[0-9]{6}$/.test(String(d.code)))fail(400,'Escribe el código de seis dígitos.');const h=await hash(`${e.OTP_PEPPER}:${d.challenge}:${d.code}`);
