@@ -19,6 +19,10 @@ async function body(req){const t=await req.text();if(t.length>5000)fail(413,'Sol
 async function event(e,id,kind){await run(e,'INSERT INTO events VALUES(?,?,?,?)',crypto.randomUUID(),id,kind,new Date().toISOString());}
 export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathname;
  if(p.startsWith('/api/')){
+  if(p==='/api/privacy'&&req.method==='GET'){
+   if(!e.PRIVACY_ADDRESS||!e.PRIVACY_EMAIL)return json({error:'El aviso de privacidad está temporalmente fuera de servicio. Intenta de nuevo más tarde.'},503);
+   return json({responsible:'María del Rocío López Lozano',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
+  }
   if(!configured(e))return json({error:'El acceso privado aún no está habilitado. Contacta a quien te compartió la invitación.'},503);
   if(req.method==='POST'&&req.headers.get('Origin')!==e.PUBLIC_ORIGIN)fail(403,'Origen no autorizado.');
   if(req.method==='POST'&&!req.headers.get('Content-Type')?.startsWith('application/json'))fail(415,'Formato no autorizado.');
@@ -53,7 +57,6 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
   if(/^\/api\/page\/[1-8]$/.test(p)&&req.method==='GET'){await accepted(req,e);const page=p.split('/').pop();const f=await e.ASSETS.fetch(new Request(`https://assets.local/_sealed/page-${page}.json`));if(!f.ok)fail(503,'La propuesta está en preparación.');const sealed=await f.json();const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',Uint8Array.from(e.PROPOSAL_KEY.match(/../g),b=>parseInt(b,16)),'AES-GCM',false,['decrypt']);let clear;try{clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(sealed.iv),additionalData:enc.encode(`maria-nails:page-${page}`)},key,bytes(sealed.data));}catch{fail(503,'La propuesta está en preparación.');}return new Response(clear,{headers:{...baseHeaders,'Content-Type':'image/webp'}});}
   if(p==='/api/receipt'&&req.method==='GET'){const r=await accepted(req,e);return new Response(receiptHTML(r),{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Disposition':'attachment; filename="Acuerdo_Maria_Nails.html"'}});}
   if(p==='/api/logout'&&req.method==='POST') {const s=await session(req,e);await run(e,'DELETE FROM sessions WHERE token_hash=?',s.token_hash);return json({ok:true},200,{'Set-Cookie':'__Host-mn=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});}
-  if(p==='/api/privacy'&&req.method==='GET')return json({responsible:'María del Rocío López Lozano',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
   fail(404,'Recurso no disponible.');
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json({error:'Método no permitido.'},405);
