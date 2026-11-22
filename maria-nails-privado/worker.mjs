@@ -19,7 +19,7 @@ async function body(req){const t=await req.text();if(t.length>5000)fail(413,'Sol
 async function event(e,id,kind){await run(e,'INSERT INTO events VALUES(?,?,?,?)',crypto.randomUUID(),id,kind,new Date().toISOString());}
 export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathname;
  if(p.startsWith('/api/')){
-  if(!configured(e))return json({error:'El acceso privado aún no está habilitado. Solicita una invitación directamente a María Nails.'},503);
+  if(!configured(e))return json({error:'El acceso privado aún no está habilitado. Contacta a quien te compartió la invitación.'},503);
   if(req.method==='POST'&&req.headers.get('Origin')!==e.PUBLIC_ORIGIN)fail(403,'Origen no autorizado.');
   if(req.method==='POST'&&!req.headers.get('Content-Type')?.startsWith('application/json'))fail(415,'Formato no autorizado.');
   const ip=req.headers.get('CF-Connecting-IP')||'unknown';
