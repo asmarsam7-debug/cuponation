@@ -9,7 +9,7 @@
     "run_worker_first": true
   },
   "vars": {
-    "PUBLIC_ORIGIN": "https://themarianails.com",
+    "PUBLIC_ORIGIN": "https://privado.themarianails.com",
     "ENABLED": "false",
     "MAIL_FROM": "María Nails <contacto@themarianails.com>",
     "OWNER_EMAIL": "zelqoza@gmail.com",
