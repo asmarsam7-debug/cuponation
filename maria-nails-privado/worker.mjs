@@ -88,7 +88,9 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json({error:'Método no permitido.'},405);
  // Only the public shell is directly reachable; sealed assets are fetched internally after authorization.
- if(!['/','/index.html','/app.js','/style.css'].includes(p))fail(404,'Recurso no disponible.');
- const res=await e.ASSETS.fetch(req);const h=new Headers(res.headers);for(const [k,v] of Object.entries(baseHeaders))h.set(k,v);return new Response(res.body,{status:res.status,headers:h});
+ const isInvitationPage=/^\/acceso\/[a-f0-9]{64}\/?$/.test(p);
+ if(!isInvitationPage&&!['/','/index.html','/app.js','/style.css'].includes(p))fail(404,'Recurso no disponible.');
+ const assetRequest=isInvitationPage?new Request(new URL('/',u),req):req;
+ const res=await e.ASSETS.fetch(assetRequest);const h=new Headers(res.headers);for(const [k,v] of Object.entries(baseHeaders))h.set(k,v);return new Response(res.body,{status:res.status,headers:h});
  }catch(err){return json({error:err.status?err.message:'No fue posible completar la solicitud.'},err.status||500);}}
 };
