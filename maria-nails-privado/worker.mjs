@@ -24,7 +24,10 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
    return json({responsible:'María del Rocío López Lozano',address:e.PRIVACY_ADDRESS,email:e.PRIVACY_EMAIL});
   }
   if(!configured(e))return json({error:'El acceso privado aún no está habilitado. Contacta a quien te compartió la invitación.'},503);
-  if(req.method==='POST'&&req.headers.get('Origin')!==e.PUBLIC_ORIGIN)fail(403,'Origen no autorizado.');
+  if(req.method==='POST'){
+   const isPresentationOrigin=u.origin===e.PUBLIC_ORIGIN||u.origin==='https://privado.liralit.com';
+   if(!isPresentationOrigin||req.headers.get('Origin')!==u.origin)fail(403,'Origen no autorizado.');
+  }
   if(req.method==='POST'&&!req.headers.get('Content-Type')?.startsWith('application/json'))fail(415,'Formato no autorizado.');
   const ip=req.headers.get('CF-Connecting-IP')||'unknown';
   if(p==='/api/start'&&req.method==='POST'){
