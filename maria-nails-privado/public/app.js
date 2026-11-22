@@ -1,9 +1,15 @@
 const $=id=>document.getElementById(id);let challenge,version,person,page=1,count=8,objectURL;
-const readInvitation=()=>new URLSearchParams(location.hash.slice(1)).get('invitacion')||'';
+const readInvitation=()=>location.pathname.match(/^\/acceso\/([a-f0-9]{64})\/?$/)?.[1]
+ ||new URLSearchParams(location.hash.slice(1)).get('invitacion')||'';
+const keepInvitationOnHomeLink=()=>{
+ const brand=document.querySelector('.brand');
+ if(brand)brand.href=readInvitation()?location.pathname+location.hash:'/';
+};
 const showInvitationStatus=()=>{
  if(!$('emailForm').hidden)$('status').textContent=readInvitation()?'':'Abre el enlace completo de la invitación para solicitar un código.';
 };
-window.addEventListener('hashchange',showInvitationStatus);
+keepInvitationOnHomeLink();
+window.addEventListener('hashchange',()=>{keepInvitationOnHomeLink();showInvitationStatus();});
 const display=id=>['access','agreement','viewer'].forEach(x=>$(x).hidden=x!==id);
 async function api(path,data){const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),credentials:'same-origin',cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'No fue posible completar la solicitud.');return j;}
 async function task(form,status,fn){const b=form.querySelector('button[type=submit]');b.disabled=true;$(status).textContent='';try{await fn()}catch(e){$(status).textContent=e.message}finally{b.disabled=false}}
