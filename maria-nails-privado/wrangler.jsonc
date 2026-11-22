@@ -22,5 +22,15 @@
       "database_name": "maria-nails-accesos",
       "database_id": "7cf49200-521a-4c88-b162-c0cd6bd0a31a"
     }
+  ],
+  "routes": [
+    {
+      "pattern": "privado.themarianails.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "privado.liralit.com",
+      "custom_domain": true
+    }
   ]
 }
