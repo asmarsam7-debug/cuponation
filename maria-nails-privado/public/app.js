@@ -1,19 +1,20 @@
 const $=id=>document.getElementById(id);let challenge,version,person,page=1,count=8,objectURL;
 const readInvitation=()=>location.pathname.match(/^\/acceso\/([a-f0-9]{64})\/?$/)?.[1]
  ||new URLSearchParams(location.hash.slice(1)).get('invitacion')||'';
+const canRequestCode=()=>readInvitation()!==''||(location.origin==='https://privado.liralit.com'&&location.pathname==='/');
 const keepInvitationOnHomeLink=()=>{
  const brand=document.querySelector('.brand');
  if(brand)brand.href=readInvitation()?location.pathname+location.hash:'/';
 };
 const showInvitationStatus=()=>{
- if(!$('emailForm').hidden)$('status').textContent=readInvitation()?'':'Abre el enlace completo de la invitación para solicitar un código.';
+ if(!$('emailForm').hidden)$('status').textContent=canRequestCode()?'':'Abre el enlace completo de la invitación para solicitar un código.';
 };
 keepInvitationOnHomeLink();
 window.addEventListener('hashchange',()=>{keepInvitationOnHomeLink();showInvitationStatus();});
 const display=id=>['access','agreement','viewer'].forEach(x=>$(x).hidden=x!==id);
 async function api(path,data){const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),credentials:'same-origin',cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'No fue posible completar la solicitud.');return j;}
 async function task(form,status,fn){const b=form.querySelector('button[type=submit]');b.disabled=true;$(status).textContent='';try{await fn()}catch(e){$(status).textContent=e.message}finally{b.disabled=false}}
-$('emailForm').onsubmit=e=>{e.preventDefault();task(e.currentTarget,'status',async()=>{const invitation=readInvitation();if(!invitation)throw Error('Abre el enlace completo de la invitación para solicitar un código.');const r=await api('start',{email:$('email').value,invite:invitation});challenge=r.challenge;$('emailForm').hidden=true;$('codeForm').hidden=false;$('stepTitle').textContent='Revisa tu correo';$('stepInfo').textContent='Escribe el código que recibiste. Tiene una vigencia de 10 minutos.';$('code').focus()})};
+$('emailForm').onsubmit=e=>{e.preventDefault();task(e.currentTarget,'status',async()=>{const invitation=readInvitation();if(!canRequestCode())throw Error('Abre el enlace completo de la invitación para solicitar un código.');const r=await api('start',{email:$('email').value,invite:invitation});challenge=r.challenge;$('emailForm').hidden=true;$('codeForm').hidden=false;$('stepTitle').textContent='Revisa tu correo';$('stepInfo').textContent='Escribe el código que recibiste. Tiene una vigencia de 10 minutos.';$('code').focus()})};
 $('restart').onclick=()=>{$('emailForm').hidden=false;$('codeForm').hidden=true;$('code').value='';$('stepTitle').textContent='Confirma tu correo';$('status').textContent=''};
 $('codeForm').onsubmit=e=>{e.preventDefault();task(e.currentTarget,'status',async()=>{await api('verify',{challenge,code:$('code').value});await load()})};
 async function load(){person=await api('me');if(person.accepted){await opening();return}const a=await api('agreement');version=a.version;$('agreementText').innerHTML=a.html;$('acceptText').textContent=a.acceptance;$('verifiedEmail').textContent='Correo verificado: '+person.email;display('agreement');window.scrollTo(0,0)}
