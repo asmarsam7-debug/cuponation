@@ -37,7 +37,7 @@ async function assertSharedLinkActive(e,inviteHash){
 }
 async function session(req,e){const t=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)__Host-mn=([a-f0-9]{64})(?:;|$)/)?.[1];if(!t)fail(401,'Verifica tu correo para continuar.');const s=await first(e,'SELECT s.* FROM sessions s JOIN invites i ON i.id_hash=s.invite_hash WHERE s.token_hash=? AND s.expires>? AND i.revoked=0 AND i.expires>?',await hash(t),now(),now());if(!s)fail(401,'Tu acceso venció. Verifica de nuevo tu correo.');await assertSharedLinkActive(e,s.invite_hash);return s;}
 async function accepted(req,e){const s=await session(req,e);if(!s.acceptance_id)fail(403,'Acepta primero el acuerdo.');const r=await first(e,'SELECT * FROM acceptances WHERE id=? AND email=?',s.acceptance_id,s.email);if(!r||r.agreement_version!==VERSION||r.mail_status!=='submitted')fail(403,'Completa la aceptación y el envío de tu constancia.');return r;}
-async function mail(e,to,subject,html,key,attachments){const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${e.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({from:e.MAIL_FROM,to:[to],reply_to:e.OWNER_EMAIL,subject,html,...(attachments?{attachments}:{})})});if(!r.ok)fail(503,'No pudimos enviar el correo. Inténtalo nuevamente en unos minutos.');return r.json();}
+async function mail(e,to,subject,html,key,{attachments,bcc}={}){const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${e.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({from:e.MAIL_FROM,to:[to],reply_to:e.OWNER_EMAIL,subject,html,...(attachments?{attachments}:{}),...(bcc?.length?{bcc}:{})})});if(!r.ok)fail(503,'No pudimos enviar el correo. Inténtalo nuevamente en unos minutos.');return r.json();}
 function b64(s){let t='';for(const b of enc.encode(s))t+=String.fromCharCode(b);return btoa(t);}
 async function body(req){const t=await req.text();if(t.length>5000)fail(413,'Solicitud demasiado grande.');try{return JSON.parse(t)}catch{fail(400,'Solicitud inválida.');}}
 async function event(e,id,kind){await run(e,'INSERT INTO events VALUES(?,?,?,?)',crypto.randomUUID(),id,kind,new Date().toISOString());}
@@ -80,7 +80,14 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
     // Snapshot and session association are atomic. Store the exact text accepted, not a future template.
     await e.DB.batch([e.DB.prepare('INSERT INTO acceptances(id,invite_hash,email,name,accepted_at,agreement_version,agreement_hash,agreement_html,acceptance_text,ip,user_agent) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(...Object.values(r)),e.DB.prepare('UPDATE sessions SET acceptance_id=? WHERE token_hash=?').bind(r.id,s.token_hash)]);
    }
-   if(r.mail_status!=='submitted'){const html=receiptHTML(r);const sent=await mail(e,r.email,'Tu acuerdo de confidencialidad · María Nails',html,`receipt-${r.id}`,[{filename:`Acuerdo_Maria_Nails_${r.id}.html`,content:b64(html)}]);await run(e,"UPDATE acceptances SET mail_status='submitted',mail_provider_id=? WHERE id=?",sent.id,r.id);}
+   if(r.mail_status!=='submitted'){
+    const html=receiptHTML(r);
+    const copyEmail=e.RECEIPT_COPY_EMAIL?.trim().toLowerCase();
+    const bcc=copyEmail&&copyEmail!==r.email.toLowerCase()?[copyEmail]:undefined;
+    const attachments=[{filename:`Acuerdo_Maria_Nails_${r.id}.html`,content:b64(html)}];
+    const sent=await mail(e,r.email,'Tu acuerdo de confidencialidad · María Nails',html,`receipt-${r.id}`,{attachments,bcc});
+    await run(e,"UPDATE acceptances SET mail_status='submitted',mail_provider_id=? WHERE id=?",sent.id,r.id);
+   }
    return json({ok:true,id:r.id,emailSubmitted:true});
   }
   if(p==='/api/open'&&req.method==='POST'){const r=await accepted(req,e);await event(e,r.id,'proposal_open');return json({name:r.name,email:r.email,pages:8});}
