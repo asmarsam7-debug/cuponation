@@ -1,5 +1,7 @@
 import {VERSION,ACCEPTANCE,agreementHTML,receiptHTML,escape} from './agreement.mjs';
 const enc=new TextEncoder();
+const LIRALIT_ORIGIN='https://privado.liralit.com';
+const LIRALIT_ENTRY_INVITE_HASH='0be12db97a106bbaa41753592dc3cf4b0c2834f675e005a233d3f66f6c28d5d1';
 export const hash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(s)))).map(x=>x.toString(16).padStart(2,'0')).join('');
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x=>x.toString(16).padStart(2,'0')).join('');
 const now=()=>Math.floor(Date.now()/1000);
@@ -10,11 +12,12 @@ const run=(env,q,...v)=>env.DB.prepare(q).bind(...v).run();
 const first=(env,q,...v)=>env.DB.prepare(q).bind(...v).first();
 export function configured(e){return !!(e.DB&&e.ASSETS&&/^[a-f0-9]{64}$/.test(e.PROPOSAL_KEY||'')&&e.RESEND_API_KEY&&e.MAIL_FROM&&e.OWNER_EMAIL&&e.PRIVACY_ADDRESS&&e.PRIVACY_EMAIL&&e.PUBLIC_ORIGIN&&e.OTP_PEPPER&&e.ENABLED==='true');}
 async function limit(e,key,max){const k=await hash(key);const r=await first(e,'INSERT INTO rate_limits(key,hits) VALUES(?,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1 RETURNING hits',k);if(r.hits>max)fail(429,'Espera unos minutos antes de intentarlo de nuevo.');}
-async function invite(e,raw,email){
- if(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw))fail(403,'Invitación no disponible.');
- const linkHash=await hash(raw);
+async function invite(e,raw,email,origin){
+ const useLiralitEntry=origin===LIRALIT_ORIGIN&&raw==='';
+ if(!useLiralitEntry&&(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw)))fail(403,'Invitación no disponible.');
+ const linkHash=useLiralitEntry?LIRALIT_ENTRY_INVITE_HASH:await hash(raw);
  const link=await first(e,'SELECT * FROM invites WHERE id_hash=? AND revoked=0 AND expires>?',linkHash,now());
- if(!link)fail(403,'Invitación no disponible.');
+ if(!link||(useLiralitEntry&&link.email!=='*'))fail(403,'Invitación no disponible.');
  if(link.email!=='*'){
   if(email!==link.email)fail(403,'El correo no corresponde a esta invitación.');
   return {hash:linkHash};
@@ -46,13 +49,13 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
   }
   if(!configured(e))return json({error:'El acceso privado aún no está habilitado. Contacta a quien te compartió la invitación.'},503);
   if(req.method==='POST'){
-   const isPresentationOrigin=u.origin===e.PUBLIC_ORIGIN||u.origin==='https://privado.liralit.com';
+   const isPresentationOrigin=u.origin===e.PUBLIC_ORIGIN||u.origin===LIRALIT_ORIGIN;
    if(!isPresentationOrigin||req.headers.get('Origin')!==u.origin)fail(403,'Origen no autorizado.');
   }
   if(req.method==='POST'&&!req.headers.get('Content-Type')?.startsWith('application/json'))fail(415,'Formato no autorizado.');
   const ip=req.headers.get('CF-Connecting-IP')||'unknown';
   if(p==='/api/start'&&req.method==='POST'){
-   const d=await body(req);await limit(e,`start:${ip}:${Math.floor(now()/600)}`,12);const email=String(d.email||'').trim().toLowerCase();const i=await invite(e,d.invite,email);
+   const d=await body(req);await limit(e,`start:${ip}:${Math.floor(now()/600)}`,12);const email=String(d.email||'').trim().toLowerCase();const i=await invite(e,d.invite,email,u.origin);
    await limit(e,`email:${await hash(email)}:${Math.floor(now()/600)}`,3);
    if(i.sharedLink)await limit(e,`shared:${i.sharedLink}:${Math.floor(now()/600)}`,60);
    const id=crypto.randomUUID();const n=new Uint32Array(1);do{crypto.getRandomValues(n)}while(n[0]>=4294000000);const code=String(n[0]%1000000).padStart(6,'0');
