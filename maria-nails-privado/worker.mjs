@@ -10,8 +10,29 @@ const run=(env,q,...v)=>env.DB.prepare(q).bind(...v).run();
 const first=(env,q,...v)=>env.DB.prepare(q).bind(...v).first();
 export function configured(e){return !!(e.DB&&e.ASSETS&&/^[a-f0-9]{64}$/.test(e.PROPOSAL_KEY||'')&&e.RESEND_API_KEY&&e.MAIL_FROM&&e.OWNER_EMAIL&&e.PRIVACY_ADDRESS&&e.PRIVACY_EMAIL&&e.PUBLIC_ORIGIN&&e.OTP_PEPPER&&e.ENABLED==='true');}
 async function limit(e,key,max){const k=await hash(key);const r=await first(e,'INSERT INTO rate_limits(key,hits) VALUES(?,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1 RETURNING hits',k);if(r.hits>max)fail(429,'Espera unos minutos antes de intentarlo de nuevo.');}
-async function invite(e,raw){if(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw))fail(403,'Invitación no disponible.');const h=await hash(raw);const r=await first(e,'SELECT * FROM invites WHERE id_hash=? AND revoked=0 AND expires>?',h,now());if(!r)fail(403,'Invitación no disponible.');return {...r,hash:h};}
-async function session(req,e){const t=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)__Host-mn=([a-f0-9]{64})(?:;|$)/)?.[1];if(!t)fail(401,'Verifica tu correo para continuar.');const s=await first(e,'SELECT s.* FROM sessions s JOIN invites i ON i.id_hash=s.invite_hash WHERE s.token_hash=? AND s.expires>? AND i.revoked=0 AND i.expires>?',await hash(t),now(),now());if(!s)fail(401,'Tu acceso venció. Verifica de nuevo tu correo.');return s;}
+async function invite(e,raw,email){
+ if(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw))fail(403,'Invitación no disponible.');
+ const linkHash=await hash(raw);
+ const link=await first(e,'SELECT * FROM invites WHERE id_hash=? AND revoked=0 AND expires>?',linkHash,now());
+ if(!link)fail(403,'Invitación no disponible.');
+ if(link.email!=='*'){
+  if(email!==link.email)fail(403,'El correo no corresponde a esta invitación.');
+  return {hash:linkHash};
+ }
+ if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Escribe un correo electrónico válido.');
+ const recipientHash=`shared:${linkHash}:${await hash(email)}`;
+ await run(e,'INSERT INTO invites(id_hash,email,expires) VALUES(?,?,?) ON CONFLICT(id_hash) DO NOTHING',recipientHash,email,link.expires);
+ const recipient=await first(e,'SELECT id_hash FROM invites WHERE id_hash=? AND revoked=0 AND expires>?',recipientHash,now());
+ if(!recipient)fail(403,'Invitación no disponible.');
+ return {hash:recipientHash,sharedLink:linkHash};
+}
+async function assertSharedLinkActive(e,inviteHash){
+ if(!inviteHash.startsWith('shared:'))return;
+ const linkHash=inviteHash.split(':')[1];
+ const link=await first(e,"SELECT id_hash FROM invites WHERE id_hash=? AND email='*' AND revoked=0 AND expires>?",linkHash,now());
+ if(!link)fail(401,'Este enlace dejó de estar disponible.');
+}
+async function session(req,e){const t=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)__Host-mn=([a-f0-9]{64})(?:;|$)/)?.[1];if(!t)fail(401,'Verifica tu correo para continuar.');const s=await first(e,'SELECT s.* FROM sessions s JOIN invites i ON i.id_hash=s.invite_hash WHERE s.token_hash=? AND s.expires>? AND i.revoked=0 AND i.expires>?',await hash(t),now(),now());if(!s)fail(401,'Tu acceso venció. Verifica de nuevo tu correo.');await assertSharedLinkActive(e,s.invite_hash);return s;}
 async function accepted(req,e){const s=await session(req,e);if(!s.acceptance_id)fail(403,'Acepta primero el acuerdo.');const r=await first(e,'SELECT * FROM acceptances WHERE id=? AND email=?',s.acceptance_id,s.email);if(!r||r.agreement_version!==VERSION||r.mail_status!=='submitted')fail(403,'Completa la aceptación y el envío de tu constancia.');return r;}
 async function mail(e,to,subject,html,key,attachments){const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${e.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({from:e.MAIL_FROM,to:[to],reply_to:e.OWNER_EMAIL,subject,html,...(attachments?{attachments}:{})})});if(!r.ok)fail(503,'No pudimos enviar el correo. Inténtalo nuevamente en unos minutos.');return r.json();}
 function b64(s){let t='';for(const b of enc.encode(s))t+=String.fromCharCode(b);return btoa(t);}
@@ -31,8 +52,10 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
   if(req.method==='POST'&&!req.headers.get('Content-Type')?.startsWith('application/json'))fail(415,'Formato no autorizado.');
   const ip=req.headers.get('CF-Connecting-IP')||'unknown';
   if(p==='/api/start'&&req.method==='POST'){
-   const d=await body(req);await limit(e,`start:${ip}:${Math.floor(now()/600)}`,12);const i=await invite(e,d.invite);const email=String(d.email||'').trim().toLowerCase();if(email!==i.email)fail(403,'El correo no corresponde a esta invitación.');
-   await limit(e,`email:${i.hash}:${Math.floor(now()/600)}`,3);const id=crypto.randomUUID();const n=new Uint32Array(1);do{crypto.getRandomValues(n)}while(n[0]>=4294000000);const code=String(n[0]%1000000).padStart(6,'0');
+   const d=await body(req);await limit(e,`start:${ip}:${Math.floor(now()/600)}`,12);const email=String(d.email||'').trim().toLowerCase();const i=await invite(e,d.invite,email);
+   await limit(e,`email:${await hash(email)}:${Math.floor(now()/600)}`,3);
+   if(i.sharedLink)await limit(e,`shared:${i.sharedLink}:${Math.floor(now()/600)}`,60);
+   const id=crypto.randomUUID();const n=new Uint32Array(1);do{crypto.getRandomValues(n)}while(n[0]>=4294000000);const code=String(n[0]%1000000).padStart(6,'0');
    await run(e,'INSERT INTO challenges(id,invite_hash,email,code_hash,expires) VALUES(?,?,?,?,?)',id,i.hash,email,await hash(`${e.OTP_PEPPER}:${id}:${code}`),now()+600);
    await mail(e,email,'Tu código de acceso privado',`<p>Tu código es <strong>${code}</strong>.</p><p>Vence en 10 minutos. No lo compartas. Este código solo verifica tu correo; todavía no has aceptado el acuerdo.</p>`,`otp-${id}`);return json({challenge:id});
   }
@@ -40,6 +63,7 @@ export default {async fetch(req,e){try{const u=new URL(req.url);const p=u.pathna
    const d=await body(req);await limit(e,`verify:${ip}:${Math.floor(now()/600)}`,30);if(!/^[0-9]{6}$/.test(String(d.code)))fail(400,'Escribe el código de seis dígitos.');const h=await hash(`${e.OTP_PEPPER}:${d.challenge}:${d.code}`);
    // Atomically consumes the code; failed attempts are capped even with parallel requests.
    const r=await first(e,'UPDATE challenges SET attempts=attempts+1,used=CASE WHEN code_hash=? THEN 1 ELSE used END WHERE id=? AND used=0 AND attempts<5 AND expires>? RETURNING *',h,String(d.challenge),now());if(!r||r.code_hash!==h)fail(403,'Código incorrecto o vencido.');
+   await assertSharedLinkActive(e,r.invite_hash);
    const t=token();await run(e,'INSERT INTO sessions(token_hash,invite_hash,email,expires) VALUES(?,?,?,?)',await hash(t),r.invite_hash,r.email,now()+43200);
    return json({ok:true},200,{'Set-Cookie':`__Host-mn=${t}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`});
   }
