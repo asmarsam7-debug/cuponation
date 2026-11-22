@@ -11,7 +11,7 @@
   "vars": {
     "PUBLIC_ORIGIN": "https://privado.themarianails.com",
     "ENABLED": "true",
-    "MAIL_FROM": "María Nails <contacto@themarianails.com>",
+    "MAIL_FROM": "Acceso privado <contacto@themarianails.com>",
     "OWNER_EMAIL": "zelqoza@gmail.com",
     "PRIVACY_EMAIL": "zelqoza@gmail.com",
     "PRIVACY_ADDRESS": "Av. Hacienda del Rosario 209-A, El Rosario, 37125 León de los Aldama, Gto."
